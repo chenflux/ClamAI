@@ -803,6 +803,24 @@ func (p *ProxyServer) handleAgentDeepCheck(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
+	switch strings.ToLower(req.AgentName) {
+	case "openclaw":
+		ocResults := runOCSecurityAudit(agentDir)
+		for _, r := range ocResults {
+			checks = append(checks, CheckItem{Category: r.Cat, Name: r.Label, Status: r.Verdict, Detail: r.Summary, Items: r.Details})
+		}
+	case "claude", "claude code":
+		ccResults := runCCSecurityAudit(agentDir)
+		for _, r := range ccResults {
+			checks = append(checks, CheckItem{Category: r.Cat, Name: r.Label, Status: r.Verdict, Detail: r.Summary, Items: r.Details})
+		}
+	case "cursor", "windsurf":
+		cursorResults := runCursorSecurityAudit(agentDir)
+		for _, r := range cursorResults {
+			checks = append(checks, CheckItem{Category: r.Cat, Name: r.Label, Status: r.Verdict, Detail: r.Summary, Items: r.Details})
+		}
+	}
+
 	scoringTotal := 0
 	scoringPass := 0
 	for _, c := range checks {

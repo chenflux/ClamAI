@@ -121,6 +121,10 @@ build-dev.bat
 
 构建产物输出到 `outputs/` 目录。
 
+## 致谢
+
+感谢以下开源项目为 ClamAI 智能体安全检测模块提供的规则与识别能力参考：[Caramel-Pudding](https://github.com/EdinLyle/Caramel-Pudding)、[cc-audit](https://github.com/ryo-ebata/cc-audit)、[golf-scanner](https://github.com/golf-mcp/golf-scanner)、[clawkeeper](https://github.com/rad-security/clawkeeper)。
+
 ## 许可证
 
 [GPLv3](LICENSE)
