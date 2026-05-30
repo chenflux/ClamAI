@@ -810,7 +810,7 @@ func scoreThreat(logs []*RequestLog, apiKeyID string) (int, []ThreatSignal) {
 		totalInput += l.InputTokens
 		totalOutput += l.OutputTokens
 
-		h := l.Timestamp.Local().Hour()
+		h := userHour(l.Timestamp)
 		hours[h]++
 
 		if l.Success {

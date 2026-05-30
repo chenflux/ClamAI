@@ -142,11 +142,13 @@ fn https_client() -> Result<reqwest::Client, String> {
         reqwest::Client::builder()
             .add_root_certificate(cert)
             .danger_accept_invalid_certs(true)
+            .no_proxy()
             .build()
             .map_err(|e| format!("Build HTTPS client failed: {}", e))?
     } else {
         reqwest::Client::builder()
             .danger_accept_invalid_certs(true)
+            .no_proxy()
             .build()
             .map_err(|e| format!("Build HTTP client failed: {}", e))?
     };
@@ -154,8 +156,17 @@ fn https_client() -> Result<reqwest::Client, String> {
 }
 
 pub(crate) fn https_client_for_url(remote_url: &str) -> Result<reqwest::Client, String> {
+    let mut builder = reqwest::Client::builder();
+
+    if remote_url.starts_with("http://127.0.0.1")
+        || remote_url.starts_with("http://localhost")
+        || remote_url.starts_with("http://[::1]")
+    {
+        builder = builder.no_proxy();
+    }
+
     if remote_url.starts_with("http://") {
-        return reqwest::Client::builder()
+        return builder
             .build()
             .map_err(|e| format!("Build HTTP client failed: {}", e));
     }
@@ -178,6 +189,7 @@ pub(crate) fn https_client_for_url(remote_url: &str) -> Result<reqwest::Client, 
             return Ok(reqwest::Client::builder()
                 .add_root_certificate(cert)
                 .danger_accept_invalid_certs(true)
+                .no_proxy()
                 .build()
                 .map_err(|e| format!("Build HTTPS client failed: {}", e))?);
         }
@@ -185,6 +197,7 @@ pub(crate) fn https_client_for_url(remote_url: &str) -> Result<reqwest::Client, 
 
     reqwest::Client::builder()
         .danger_accept_invalid_certs(true)
+        .no_proxy()
         .build()
         .map_err(|e| format!("Build HTTP client failed: {}", e))
 }
@@ -266,6 +279,7 @@ pub async fn get_proxy_models(
     let client = reqwest::Client::builder()
         .danger_accept_invalid_certs(true)
         .timeout(std::time::Duration::from_secs(10))
+        .no_proxy()
         .build()
         .map_err(|e| format!("创建HTTP客户端失败: {}", e))?;
     let resp = client.get(&url).send().await.map_err(|e| format!("请求模型列表失败: {}", e))?;
@@ -670,6 +684,7 @@ pub async fn tauri_fetch(
     let client = reqwest::Client::builder()
         .danger_accept_invalid_certs(true)
         .timeout(std::time::Duration::from_secs(30))
+        .no_proxy()
         .build()
         .map_err(|e| format!("创建HTTP客户端失败: {}", e))?;
 

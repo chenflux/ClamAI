@@ -441,7 +441,8 @@ type AlertStats struct {
 func dbGetAlertStats(source string) AlertStats {
 	var stats AlertStats
 	now := time.Now()
-	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	loc := getUserLocation()
+	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
 	hour24Start := now.Add(-24 * time.Hour)
 
 	baseQuery := gormDB.Model(&DBSecurityAlert{})

@@ -72,14 +72,14 @@ func dbGetAnalysisTasks(userID string) ([]map[string]interface{}, error) {
 			"schedule_type":    t.ScheduleType,
 			"interval_minutes": t.IntervalMinutes,
 			"status":           t.Status,
-			"created_at":       t.CreatedAt.Format(time.RFC3339),
+			"created_at":       t.CreatedAt.UTC().Format(time.RFC3339),
 			"result_logs_analyzed": t.ResultLogsCount,
 		}
 		if t.LastRunAt != nil {
-			m["last_run_at"] = t.LastRunAt.Format(time.RFC3339)
+			m["last_run_at"] = t.LastRunAt.UTC().Format(time.RFC3339)
 		}
 		if t.NextRunAt != nil {
-			m["next_run_at"] = t.NextRunAt.Format(time.RFC3339)
+			m["next_run_at"] = t.NextRunAt.UTC().Format(time.RFC3339)
 		}
 		if t.ResultSummary != "" {
 			m["result_summary"] = t.ResultSummary
@@ -115,7 +115,7 @@ func dbGetSkillsTaskByID(taskID string) (map[string]interface{}, error) {
 		"source_info":   t.SourceInfo,
 		"schedule_type": t.ScheduleType,
 		"status":        t.Status,
-		"created_at":    t.CreatedAt.Format(time.RFC3339),
+		"created_at":    t.CreatedAt.UTC().Format(time.RFC3339),
 		"created_by":    t.CreatedBy,
 	}
 	if t.LastRunAt != nil {
@@ -252,13 +252,13 @@ func dbGetSkillsTasks(userID string) ([]map[string]interface{}, error) {
 			"source_info":   t.SourceInfo,
 			"schedule_type": t.ScheduleType,
 			"status":        t.Status,
-			"created_at":    t.CreatedAt.Format(time.RFC3339),
+			"created_at":    t.CreatedAt.UTC().Format(time.RFC3339),
 		}
 		if t.CreatedBy != "" {
 			m["created_by"] = t.CreatedBy
 		}
 		if t.LastRunAt != nil {
-			m["last_run_at"] = t.LastRunAt.Format(time.RFC3339)
+			m["last_run_at"] = t.LastRunAt.UTC().Format(time.RFC3339)
 		}
 		if t.RiskLevel != "" {
 			m["result_risk_level"] = t.RiskLevel
@@ -357,7 +357,7 @@ func dbGetSkillsTaskHistory(taskID string) ([]map[string]interface{}, error) {
 			"dimensions":   h.Dimensions,
 			"status":       h.Status,
 			"duration_ms":  h.DurationMs,
-			"run_at":       h.RunAt.Format(time.RFC3339),
+			"run_at":       h.RunAt.UTC().Format(time.RFC3339),
 		})
 	}
 	return result, nil
@@ -401,7 +401,7 @@ func dbGetAnalysisTaskHistory(taskID string) ([]map[string]interface{}, error) {
 			"logs_analyzed":  h.LogsAnalyzed,
 			"status":         h.Status,
 			"duration_ms":    h.DurationMs,
-			"run_at":         h.RunAt.Format(time.RFC3339),
+			"run_at":         h.RunAt.UTC().Format(time.RFC3339),
 		})
 	}
 	return result, nil

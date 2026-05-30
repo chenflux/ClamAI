@@ -25,6 +25,25 @@ func formatTimeNow() string {
 	return formatTimeUTC(time.Now())
 }
 
+func getUserLocation() *time.Location {
+	tzName := dbGetSystemSetting("ui.timezone")
+	if tzName == "" {
+		tzName = "Local"
+	}
+	if loc, err := time.LoadLocation(tzName); err == nil {
+		return loc
+	}
+	return time.Local
+}
+
+func formatTimeUser(t time.Time) string {
+	return t.In(getUserLocation()).Format("2006-01-02 15:04:05")
+}
+
+func userHour(t time.Time) int {
+	return t.In(getUserLocation()).Hour()
+}
+
 func generateID() string {
 	b := make([]byte, 12)
 	rand.Read(b)

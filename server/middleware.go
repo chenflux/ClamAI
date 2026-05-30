@@ -198,7 +198,7 @@ func (p *ProxyServer) apiLoggingMiddleware(next http.Handler) http.Handler {
 			}
 			safeReqHeaders := sanitizeHeadersForJSON(reqHeaders)
 			apiReqLogger.Info("api_request",
-				"timestamp", time.Now().Format(time.RFC3339),
+				"timestamp", time.Now().UTC().Format(time.RFC3339),
 				"method", r.Method,
 				"path", path,
 				"host", r.Host,
@@ -375,7 +375,7 @@ func (p *ProxyServer) requestTrackingMiddleware(next http.Handler) http.Handler 
 			td.OutputTokens += int64(outputTokens)
 			p.stats.TokensByModel[model] = td
 		}
-		dateKey := start.Format("2006-01-02")
+		dateKey := start.In(getUserLocation()).Format("2006-01-02")
 		if ds, ok := p.stats.DailyStats[dateKey]; ok {
 			ds.Requests++
 			ds.InputTokens += int64(inputTokens)

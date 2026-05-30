@@ -92,7 +92,7 @@ func dbUpdateUserPassword(id, passwordHash string) error {
 }
 
 func dbUpdateUserLastLogin(id string) {
-	now := time.Now()
+	now := time.Now().UTC()
 	if err := gormDB.Model(&DBUser{}).Where("id = ?", id).Update("last_login_at", &now).Error; err != nil {
 		log.Printf("[ERROR] dbUpdateUserLastLogin(%s): %v", id, err)
 	}

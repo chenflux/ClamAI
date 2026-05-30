@@ -125,7 +125,7 @@ func (p *ProxyServer) handleUserProfileAnalysis(w http.ResponseWriter, r *http.R
 	conversationSummary.WriteString(fmt.Sprintf("以下是通过该API Key的最近%d天的调用记录（共%d条），请分析调用者行为模式：\n\n", days, len(logs)))
 
 	for i, log := range logs {
-		timestamp := log.Timestamp.Local().Format("2006-01-02 15:04:05")
+		timestamp := formatTimeUser(log.Timestamp)
 		conversationSummary.WriteString(fmt.Sprintf("[%d] 时间=%s, 模型=%s, 提供者=%s, 输入Token=%d, 输出Token=%d, 延迟=%dms, 成功=%v, IP=%s\n",
 			i+1, timestamp, log.Model, log.Provider, log.InputTokens, log.OutputTokens, log.LatencyMs, log.Success, log.ClientIP))
 		if log.RequestContent != "" {
@@ -1078,7 +1078,7 @@ func (p *ProxyServer) executeAnalysisTask(taskID string, task map[string]interfa
 	var conversationSummary strings.Builder
 	conversationSummary.WriteString(fmt.Sprintf("以下是通过该API Key的调用记录（共%d条），请分析调用者行为模式：\n\n", len(logs)))
 	for i, l := range logs {
-		timestamp := l.Timestamp.Local().Format("2006-01-02 15:04:05")
+		timestamp := formatTimeUser(l.Timestamp)
 		conversationSummary.WriteString(fmt.Sprintf("[%d] 时间=%s, 模型=%s, 提供者=%s, 输入Token=%d, 输出Token=%d, 延迟=%dms, 成功=%v, IP=%s\n",
 			i+1, timestamp, l.Model, l.Provider, l.InputTokens, l.OutputTokens, l.LatencyMs, l.Success, l.ClientIP))
 	}

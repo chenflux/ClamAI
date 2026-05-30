@@ -497,7 +497,7 @@ func (p *ProxyServer) handleAlertStats(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for _, a := range alerts {
-		localTS := a.Timestamp.Local()
+		localTS := a.Timestamp.In(getUserLocation())
 		dateKey := localTS.Format("2006-01-02")
 		hourKey := localTS.Format("2006-01-02 15") + ":00"
 		minuteKey := localTS.Format("2006-01-02 15:04")

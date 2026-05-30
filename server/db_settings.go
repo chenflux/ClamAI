@@ -108,7 +108,7 @@ func dbListProviders() []map[string]interface{} {
 		if p.APIKey != "" {
 			apiKeys = append(apiKeys, map[string]interface{}{
 				"id": p.ID + "_key1", "key_value": p.APIKey, "name": "默认密钥",
-				"is_active": true, "created_at": p.CreatedAt.Format(time.RFC3339), "usage_count": 0,
+				"is_active": true, "created_at": p.CreatedAt.UTC().Format(time.RFC3339), "usage_count": 0,
 			})
 		}
 		m := map[string]interface{}{
@@ -117,7 +117,7 @@ func dbListProviders() []map[string]interface{} {
 			"models": modelsArr, "disabled_models": disabledArr,
 			"oauth_config": oauth, "rate_limits": rl, "priority": p.Priority,
 			"created_by": p.CreatedBy, "created_by_name": getUserNameByID(p.CreatedBy),
-			"created_at": p.CreatedAt.Format(time.RFC3339), "updated_at": p.UpdatedAt.Format(time.RFC3339),
+			"created_at": p.CreatedAt.UTC().Format(time.RFC3339), "updated_at": p.UpdatedAt.UTC().Format(time.RFC3339),
 		}
 		result = append(result, m)
 	}
@@ -188,7 +188,7 @@ func dbUpdateProvider(id string, p map[string]interface{}) error {
 		"models": string(models), "disabled_models": string(disabled),
 		"oauth_config": string(oauth), "rate_limits": string(rates),
 		"priority": intOr(p["priority"], 0),
-		"updated_at": time.Now(),
+		"updated_at": time.Now().UTC(),
 	}).Error
 }
 
@@ -238,7 +238,7 @@ func dbListProfiles(userIDs ...string) []map[string]interface{} {
 			"providers_json": p.ProvidersJSON, "mappings_json": p.MappingsJSON,
 			"gateway_json": p.GatewayJSON, "advanced_json": p.AdvancedJSON,
 			"service_json": p.ServiceJSON, "created_by": p.CreatedBy,
-			"created_at": p.CreatedAt.Format(time.RFC3339), "updated_at": p.UpdatedAt.Format(time.RFC3339),
+			"created_at": p.CreatedAt.UTC().Format(time.RFC3339), "updated_at": p.UpdatedAt.UTC().Format(time.RFC3339),
 		})
 	}
 	return result
@@ -307,14 +307,14 @@ func dbDeleteProfile(id string) error {
 
 func dbRenameProfile(id, newName string) error {
 	return gormDB.Model(&DBProfile{}).Where("id = ?", id).Updates(map[string]interface{}{
-		"name": newName, "updated_at": time.Now(),
+		"name": newName, "updated_at": time.Now().UTC(),
 	}).Error
 }
 
 func dbSetActiveProfile(id string) error {
 	gormDB.Model(&DBProfile{}).Where("is_active = ?", true).Update("is_active", false)
 	return gormDB.Model(&DBProfile{}).Where("id = ?", id).Updates(map[string]interface{}{
-		"is_active": true, "updated_at": time.Now(),
+		"is_active": true, "updated_at": time.Now().UTC(),
 	}).Error
 }
 

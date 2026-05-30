@@ -329,7 +329,7 @@ func executeSystemAnalysisTask(taskID string, task map[string]interface{}) {
 		var buf strings.Builder
 		buf.WriteString(fmt.Sprintf("以下是通过该API Key(%s)的新增调用记录（共%d条，自上次分析后新增），请分析调用者行为模式，识别潜在安全威胁：\n\n", k.ID, len(logs)))
 		for i, l := range logs {
-			timestamp := l.Timestamp.Local().Format("2006-01-02 15:04:05")
+			timestamp := formatTimeUser(l.Timestamp)
 			buf.WriteString(fmt.Sprintf("[%d] 时间=%s, 模型=%s, 提供者=%s, 输入Token=%d, 输出Token=%d, 延迟=%dms, 成功=%v, IP=%s\n",
 				i+1, timestamp, l.Model, l.Provider, l.InputTokens, l.OutputTokens, l.LatencyMs, l.Success, l.ClientIP))
 			if l.RequestContent != "" {
