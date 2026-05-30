@@ -21,6 +21,7 @@ const AlertRealtime = React.lazy(() => import("./pages/alerts/Realtime"));
 const AlertThreats = React.lazy(() => import("./pages/alerts/Threats"));
 const SecurityTools = React.lazy(() => import("./pages/SecurityTools"));
 const SecuritySettings = React.lazy(() => import("./pages/SecuritySettings"));
+const SystemSettings = React.lazy(() => import("./pages/SystemSettings"));
 const UserManagement = React.lazy(() => import("./pages/UserManagement"));
 const KeyControl = React.lazy(() => import("./pages/KeyControl"));
 const RateLimit = React.lazy(() => import("./pages/RateLimit"));
@@ -78,6 +79,7 @@ const mainRoutes = (
     <Route path="/audit-logs" element={<LazyPage><AdminRoute><AuditLogs /></AdminRoute></LazyPage>} />
     <Route path="/basic-settings" element={<LazyPage><BasicSettings /></LazyPage>} />
     <Route path="/security-settings" element={<LazyPage><AdminRoute><SecuritySettings /></AdminRoute></LazyPage>} />
+    <Route path="/system-settings" element={<LazyPage><AdminRoute><SystemSettings /></AdminRoute></LazyPage>} />
     <Route path="/about" element={<LazyPage><About /></LazyPage>} />
     <Route path="/providers" element={<Navigate to="/models-mgmt" replace />} />
     <Route path="/models" element={<Navigate to="/models-mgmt" replace />} />

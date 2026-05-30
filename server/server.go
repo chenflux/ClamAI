@@ -59,6 +59,9 @@ func NewProxyServer(config *Config) (*ProxyServer, error) {
 		return nil, fmt.Errorf("failed to init database: %w", err)
 	}
 
+	loadSystemAccessConfig()
+	initSystemAccessCleanup()
+
 	if err := proxy.initProviders(); err != nil {
 		return nil, fmt.Errorf("failed to initialize providers: %w", err)
 	}
@@ -337,11 +340,15 @@ func (p *ProxyServer) setupRoutes() {
 	log.Printf("[SETUP] User routes registered")
 	p.setupAuditRoutes(api)
 	log.Printf("[SETUP] Audit routes registered")
+	p.setupSystemAccessRoutes(api)
+	log.Printf("[SETUP] System access routes registered")
 	p.setupFrontendRoutes()
 	log.Printf("[SETUP] Frontend routes registered (or skipped if not server mode)")
 
 	p.adminRouter.Use(p.corsMiddleware)
 	p.adminRouter.Use(p.requestIDMiddleware)
+	p.adminRouter.Use(p.ipAccessMiddleware)
+	p.adminRouter.Use(p.honeypotMiddleware)
 	p.adminRouter.Use(p.apiLoggingMiddleware)
 	p.adminRouter.Use(p.rateLimitMiddleware)
 	p.adminRouter.Use(p.adminAuthMiddleware)

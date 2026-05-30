@@ -23,18 +23,15 @@ type loginAttemptInfo struct {
 	blocked  bool
 }
 
-const maxLoginAttempts = 5
-const loginAttemptWindow = 15 * time.Minute
-const loginBlockDuration = 30 * time.Minute
-
 func getRemainingLoginAttempts(ip string) int {
+	cfg := getLoginGuardConfig()
 	loginAttemptsMu.Lock()
 	defer loginAttemptsMu.Unlock()
 	info, exists := loginAttempts[ip]
 	if !exists {
-		return maxLoginAttempts
+		return cfg.MaxAttempts
 	}
-	remaining := maxLoginAttempts - info.count
+	remaining := cfg.MaxAttempts - info.count
 	if remaining < 0 {
 		remaining = 0
 	}
@@ -48,6 +45,9 @@ func clearLoginAttempts(ip string) {
 }
 
 func checkLoginRateLimit(ip string) bool {
+	cfg := getLoginGuardConfig()
+	window := time.Duration(cfg.WindowMinutes) * time.Minute
+	blockDur := time.Duration(cfg.BlockMinutes) * time.Minute
 	loginAttemptsMu.Lock()
 	defer loginAttemptsMu.Unlock()
 	now := time.Now()
@@ -56,7 +56,7 @@ func checkLoginRateLimit(ip string) bool {
 		loginAttempts[ip] = &loginAttemptInfo{count: 1, lastTime: now}
 		return true
 	}
-	if info.blocked && now.Sub(info.lastTime) < loginBlockDuration {
+	if info.blocked && now.Sub(info.lastTime) < blockDur {
 		return false
 	}
 	if info.blocked {
@@ -64,14 +64,15 @@ func checkLoginRateLimit(ip string) bool {
 		loginAttempts[ip] = &loginAttemptInfo{count: 1, lastTime: now}
 		return true
 	}
-	if now.Sub(info.lastTime) > loginAttemptWindow {
+	if now.Sub(info.lastTime) > window {
 		loginAttempts[ip] = &loginAttemptInfo{count: 1, lastTime: now}
 		return true
 	}
 	info.count++
 	info.lastTime = now
-	if info.count > maxLoginAttempts {
+	if info.count > cfg.MaxAttempts {
 		info.blocked = true
+		addGreyListWithSource(ip, "login_brute")
 		return false
 	}
 	return true
@@ -84,9 +85,10 @@ func init() {
 			loginAttemptsMu.Lock()
 			now := time.Now()
 			for ip, info := range loginAttempts {
-				maxAge := loginAttemptWindow
+				cfg := getLoginGuardConfig()
+				maxAge := time.Duration(cfg.WindowMinutes) * time.Minute
 				if info.blocked {
-					maxAge = loginBlockDuration
+					maxAge = time.Duration(cfg.BlockMinutes) * time.Minute
 				}
 				if now.Sub(info.lastTime) > maxAge {
 					delete(loginAttempts, ip)
