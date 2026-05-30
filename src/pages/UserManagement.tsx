@@ -2,6 +2,8 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { usersApi } from "../api/users";
 import { authApi } from "../api/auth";
+import { isTauri } from "../api/client";
+import { useCurrentUser } from "../context/UserContext";
 import {
   Users,
   UserPlus,
@@ -15,6 +17,8 @@ import {
   RefreshCw,
   ToggleLeft,
   ToggleRight,
+  Copy,
+  Check,
 } from "lucide-react";
 
 interface UserInfo {
@@ -30,11 +34,13 @@ interface UserInfo {
 
 function UserManagement() {
   const queryClient = useQueryClient();
+  const { currentUser } = useCurrentUser();
   const [showCreate, setShowCreate] = useState(false);
   const [editingUser, setEditingUser] = useState<UserInfo | null>(null);
   const [resettingUserId, setResettingUserId] = useState<string | null>(null);
   const [newUser, setNewUser] = useState({ username: "", password: "", display_name: "", role: "user" });
   const [resetPassword, setResetPassword] = useState("");
+  const [copied, setCopied] = useState(false);
   const [regOpen, setRegOpen] = useState(false);
 
   const { data: usersData, refetch } = useQuery({
@@ -73,6 +79,7 @@ function UserManagement() {
         display_name: u.display_name,
         role: u.role,
         is_active: u.status === "active",
+        status: u.status,
       }),
     onSuccess: () => {
       setEditingUser(null);
@@ -167,6 +174,34 @@ function UserManagement() {
             </span>
           </button>
         </div>
+        {regOpen && (
+          <div className="mt-3 p-3 bg-green-500/5 border border-green-500/20 rounded-lg">
+            <p className="text-sm font-medium text-green-600 dark:text-green-400">注册已开放</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {isTauri() ? (
+                "其他用户可在本程序登录页点击「注册新账号」创建账号（仅限普通用户角色）。如需管理员请退出当前账号后查看。"
+              ) : (
+                <>
+                  新用户可访问登录页面点击「注册新账号」创建账号（仅限普通用户角色）。
+                  <span className="block mt-1.5 font-mono text-xs bg-secondary px-2 py-1 rounded select-all">
+                    {window.location.origin}/admin/
+                  </span>
+                  <button
+                    className="mt-1.5 flex items-center gap-1 text-xs text-primary hover:underline"
+                    onClick={() => {
+                      navigator.clipboard.writeText(`${window.location.origin}/admin/`);
+                      setCopied(true);
+                      setTimeout(() => setCopied(false), 2000);
+                    }}
+                  >
+                    {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                    {copied ? "已复制" : "复制登录页地址"}
+                  </button>
+                </>
+              )}
+            </p>
+          </div>
+        )}
       </div>
 
       {showCreate && (
@@ -274,9 +309,10 @@ function UserManagement() {
                         value={editingUser.status}
                         onChange={(e) => setEditingUser({ ...editingUser, status: e.target.value })}
                         className="w-full px-3 py-1.5 bg-background border border-border rounded text-sm"
+                        disabled={editingUser.id === currentUser?.userId || editingUser.role === "admin"}
                       >
                         <option value="active">正常</option>
-                        <option value="disabled">禁用</option>
+                        <option value="disabled" disabled={editingUser.id === currentUser?.userId || editingUser.role === "admin"}>禁用</option>
                       </select>
                     </div>
                   </div>
@@ -322,7 +358,7 @@ function UserManagement() {
                         <ToggleRight className="w-4 h-4" />
                       </button>
                     )}
-                    {user.status === "active" && (
+                    {user.status === "active" && user.role !== "admin" && user.id !== currentUser?.userId && (
                       <button
                         onClick={() => { if (confirm(`确定要停用用户 ${user.username} 吗？停用后该用户将无法登录。`)) updateMutation.mutate({ ...user, status: "disabled" }); }}
                         className="p-1.5 text-muted-foreground hover:text-red-500"
@@ -349,8 +385,9 @@ function UserManagement() {
                       onClick={() => { if (confirm(`确定要删除用户 ${user.username} 吗？`)) deleteMutation.mutate(user.id); }}
                       className="p-1.5 text-muted-foreground hover:text-red-500"
                       title="删除"
+                      disabled={user.id === currentUser?.userId}
                     >
-                      <Trash2 className="w-4 h-4" />
+                      <Trash2 className={`w-4 h-4 ${user.id === currentUser?.userId ? "opacity-30 cursor-not-allowed" : ""}`} />
                     </button>
                   </div>
                 </div>

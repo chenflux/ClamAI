@@ -107,10 +107,13 @@ func (p *ProxyServer) adminAuthMiddleware(next http.Handler) http.Handler {
 			log.Printf("[AUTH] path=%s: localhost request, bypassing auth", path)
 			if tokenStr := extractBearerToken(r); tokenStr != "" {
 				if claims, err := validateToken(tokenStr); err == nil && claims != nil {
-					if !isUserDisabled(claims.Username) {
-						ctx := r.Context()
-						r = r.WithContext(contextWithUser(ctx, claims))
+					if isUserDisabled(claims.Username) {
+						log.Printf("[AUTH] path=%s: localhost but user %s is disabled, rejecting", path, claims.Username)
+						http.Error(w, "Account disabled", http.StatusForbidden)
+						return
 					}
+					ctx := r.Context()
+					r = r.WithContext(contextWithUser(ctx, claims))
 				}
 			}
 			next.ServeHTTP(w, r)

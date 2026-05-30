@@ -56,7 +56,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener("auth:unauthorized", handler);
   }, []);
 
-  const checkStatus = async () => {
+  const checkStatus = async (skipAutoLogin?: boolean) => {
     try {
       const status = await authApi.status();
       setInitialized(status.initialized);
@@ -64,18 +64,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setRegistrationOpen(status.registration_open === true);
       setIsInitialized(true);
 
-      if (status.mode === "pc" && status.initialized) {
-        if (!token) {
-          tryAutoLogin();
-        }
+      if (!skipAutoLogin && status.mode === "pc" && status.initialized && !token) {
+        tryAutoLogin();
       }
     } catch (e) {
       console.error("[AuthContext] checkStatus FAILED:", e);
-      if (isTauri()) {
-        setIsInitialized(true);
-      } else {
-        setIsInitialized(true);
-      }
+      setIsInitialized(true);
     }
   };
 
@@ -121,6 +115,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     authApi.logout();
     setToken(null);
     localStorage.removeItem("clamai_token");
+    checkStatus(true);
   }, []);
 
   const changePassword = useCallback(

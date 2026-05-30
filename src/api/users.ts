@@ -20,7 +20,7 @@ export const usersApi = {
   create: (username: string, password: string, role: string = "user", displayName?: string) =>
     apiRequest<void>("POST", "/users", { username, password, role, display_name: displayName }),
 
-  update: (id: string, data: { role?: string; display_name?: string; is_active?: boolean }) =>
+  update: (id: string, data: { role?: string; display_name?: string; is_active?: boolean; status?: string }) =>
     apiRequest<void>("PUT", `/users/${id}`, data),
 
   delete: (id: string) =>

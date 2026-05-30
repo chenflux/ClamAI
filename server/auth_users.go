@@ -130,10 +130,32 @@ func (p *ProxyServer) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 		DisplayName string `json:"display_name"`
 		Role        string `json:"role"`
 		Status      string `json:"status"`
+		IsActive    *bool  `json:"is_active"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request", http.StatusBadRequest)
 		return
+	}
+	if req.IsActive != nil {
+		if *req.IsActive {
+			req.Status = "active"
+		} else {
+			req.Status = "disabled"
+		}
+	}
+	claims := getUserFromRequest(r)
+	if req.Status == "disabled" {
+		if claims != nil && claims.UserID == id {
+			http.Error(w, "不能禁用自己", http.StatusBadRequest)
+			return
+		}
+		target, _ := dbGetUserByID(id)
+		if target != nil {
+			if targetRole, _ := target["role"].(string); targetRole == "admin" {
+				http.Error(w, "不能禁用管理员", http.StatusBadRequest)
+				return
+			}
+		}
 	}
 	if req.Role != "admin" {
 		var adminCount int64
