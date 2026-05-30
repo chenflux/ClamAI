@@ -22,12 +22,10 @@ func (p *ProxyServer) handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 
-	p.stats.mu.Lock()
-	total := p.stats.TotalRequests
-	active := p.stats.ActiveRequests
-	success := p.stats.SuccessRequests
-	errCount := p.stats.ErrorRequests
-	p.stats.mu.Unlock()
+	total := p.stats.TotalRequests.Load()
+	active := p.stats.ActiveRequests.Load()
+	success := p.stats.SuccessRequests.Load()
+	errCount := p.stats.ErrorRequests.Load()
 
 	health := map[string]interface{}{
 		"status":  "healthy",

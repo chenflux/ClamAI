@@ -33,13 +33,12 @@ func (p *ProxyServer) securityMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		bodyBytes, err := io.ReadAll(io.LimitReader(r.Body, 50<<20))
-		if err != nil {
-			next.ServeHTTP(w, r)
-			return
+		bodyBytes := bodyFromContext(r)
+		if bodyBytes == nil {
+			bodyBytes, _ = io.ReadAll(io.LimitReader(r.Body, 50<<20))
+			r.Body.Close()
+			r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 		}
-		r.Body.Close()
-		r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 
 		var reqMap map[string]interface{}
 		isStream := false

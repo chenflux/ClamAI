@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -121,13 +122,13 @@ type DailyStat struct {
 
 type RequestStats struct {
 	mu                 sync.Mutex
-	TotalRequests      int64
-	ActiveRequests     int32
-	SuccessRequests    int64
-	ErrorRequests      int64
-	InputTokens        int64
-	OutputTokens       int64
-	TotalLatencyMs     int64
+	TotalRequests      atomic.Int64
+	ActiveRequests     atomic.Int32
+	SuccessRequests    atomic.Int64
+	ErrorRequests      atomic.Int64
+	InputTokens        atomic.Int64
+	OutputTokens       atomic.Int64
+	TotalLatencyMs     atomic.Int64
 	RequestsByProvider map[string]int64
 	RequestsByModel    map[string]int64
 	TokensByProvider   map[string]TokenDetail
@@ -169,12 +170,12 @@ func getDataDir() string {
 
 func (s *RequestStats) ToJSON() RequestStatsForJSON {
 	return RequestStatsForJSON{
-		TotalRequests:      s.TotalRequests,
-		SuccessRequests:    s.SuccessRequests,
-		ErrorRequests:      s.ErrorRequests,
-		InputTokens:        s.InputTokens,
-		OutputTokens:       s.OutputTokens,
-		TotalLatencyMs:     s.TotalLatencyMs,
+		TotalRequests:      s.TotalRequests.Load(),
+		SuccessRequests:    s.SuccessRequests.Load(),
+		ErrorRequests:      s.ErrorRequests.Load(),
+		InputTokens:        s.InputTokens.Load(),
+		OutputTokens:       s.OutputTokens.Load(),
+		TotalLatencyMs:     s.TotalLatencyMs.Load(),
 		RequestsByProvider: s.RequestsByProvider,
 		RequestsByModel:    s.RequestsByModel,
 		TokensByProvider:   s.TokensByProvider,
@@ -183,12 +184,12 @@ func (s *RequestStats) ToJSON() RequestStatsForJSON {
 }
 
 func (s *RequestStats) LoadFromJSON(j *RequestStatsForJSON) {
-	s.TotalRequests = j.TotalRequests
-	s.SuccessRequests = j.SuccessRequests
-	s.ErrorRequests = j.ErrorRequests
-	s.InputTokens = j.InputTokens
-	s.OutputTokens = j.OutputTokens
-	s.TotalLatencyMs = j.TotalLatencyMs
+	s.TotalRequests.Store(j.TotalRequests)
+	s.SuccessRequests.Store(j.SuccessRequests)
+	s.ErrorRequests.Store(j.ErrorRequests)
+	s.InputTokens.Store(j.InputTokens)
+	s.OutputTokens.Store(j.OutputTokens)
+	s.TotalLatencyMs.Store(j.TotalLatencyMs)
 	if j.RequestsByProvider != nil {
 		s.RequestsByProvider = j.RequestsByProvider
 	}
@@ -300,7 +301,7 @@ type APIKeyInfo struct {
 	ProviderKeys  map[string]string `json:"provider_keys"`
 	CreatedAt     time.Time         `json:"created_at"`
 	Active        bool              `json:"active"`
-	RequestCount  int64             `json:"request_count"`
+	RequestCount  atomic.Int64      `json:"request_count"`
 	LastUsed      *time.Time        `json:"last_used,omitempty"`
 	LastSynced    *time.Time        `json:"last_synced,omitempty"`
 }

@@ -110,7 +110,7 @@ func migrateFromJSON() error {
 						AllowedModels: string(modelsJSON),
 						CreatedAt:     info.CreatedAt.UTC(),
 						Active:        info.Active,
-						RequestCount:  info.RequestCount,
+						RequestCount:  info.RequestCount.Load(),
 						LastUsed:      lastUsed,
 					}
 					if err := gormDB.Where("id = ?", key.ID).FirstOrCreate(&key).Error; err != nil {

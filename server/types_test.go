@@ -53,8 +53,8 @@ func TestNewRequestStats(t *testing.T) {
 
 func TestRequestStatsToJSON(t *testing.T) {
 	stats := NewRequestStats()
-	stats.TotalRequests = 42
-	stats.InputTokens = 100
+	stats.TotalRequests.Store(42)
+	stats.InputTokens.Store(100)
 
 	j := stats.ToJSON()
 	if j.TotalRequests != 42 {
@@ -77,8 +77,8 @@ func TestRequestStatsLoadFromJSON(t *testing.T) {
 		RequestsByProvider: map[string]int64{"openai": 5},
 	}
 	stats.LoadFromJSON(j)
-	if stats.TotalRequests != 10 {
-		t.Errorf("TotalRequests = %d, want 10", stats.TotalRequests)
+	if stats.TotalRequests.Load() != 10 {
+		t.Errorf("TotalRequests = %d, want 10", stats.TotalRequests.Load())
 	}
 	if stats.RequestsByProvider["openai"] != 5 {
 		t.Errorf("RequestsByProvider[openai] = %d, want 5", stats.RequestsByProvider["openai"])

@@ -150,6 +150,26 @@ func (p *ProxyServer) providerMatchMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+func (p *ProxyServer) bodyReadMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "POST" || r.Method == "PUT" || r.Method == "PATCH" {
+			bodyBytes, _ := io.ReadAll(io.LimitReader(r.Body, 50<<20))
+			r.Body.Close()
+			r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+			r = withBody(r, bodyBytes)
+			if len(bodyBytes) > 0 {
+				var peek map[string]interface{}
+				if json.Unmarshal(bodyBytes, &peek) == nil {
+					if s, ok := peek["stream"].(bool); ok {
+						r = withStreamFlag(r, s)
+					}
+				}
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 func (p *ProxyServer) apiLoggingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
@@ -227,9 +247,12 @@ func (p *ProxyServer) requestTrackingMiddleware(next http.Handler) http.Handler 
 
 		start := time.Now()
 
-		bodyBytes, _ := io.ReadAll(io.LimitReader(r.Body, 50<<20))
-		r.Body.Close()
-		r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+		bodyBytes := bodyFromContext(r)
+		if bodyBytes == nil {
+			bodyBytes, _ = io.ReadAll(io.LimitReader(r.Body, 50<<20))
+			r.Body.Close()
+			r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+		}
 
 		model := extractModelFromBody(bodyBytes, &spec.Usage)
 		provider := spec.Name
@@ -300,7 +323,7 @@ func (p *ProxyServer) requestTrackingMiddleware(next http.Handler) http.Handler 
 			}
 			if provider != "" {
 				p.logBuffer.Add(entry)
-				dbInsertLog(entry)
+				asyncLogInsert(entry)
 			}
 			return
 		}
@@ -326,10 +349,8 @@ func (p *ProxyServer) requestTrackingMiddleware(next http.Handler) http.Handler 
 			}
 		}
 
-		p.stats.mu.Lock()
-		p.stats.TotalRequests++
-		p.stats.ActiveRequests++
-		p.stats.mu.Unlock()
+		p.stats.TotalRequests.Add(1)
+		p.stats.ActiveRequests.Add(1)
 
 		cw := &capturingResponseWriter{ResponseWriter: w, statusCode: http.StatusOK}
 
@@ -351,16 +372,17 @@ func (p *ProxyServer) requestTrackingMiddleware(next http.Handler) http.Handler 
 			inputTokens, outputTokens = extractTokensFromBody(cw.body.Bytes(), &spec.Usage)
 		}
 
-		p.stats.mu.Lock()
-		p.stats.ActiveRequests--
+		p.stats.ActiveRequests.Add(-1)
 		if success {
-			p.stats.SuccessRequests++
+			p.stats.SuccessRequests.Add(1)
 		} else {
-			p.stats.ErrorRequests++
+			p.stats.ErrorRequests.Add(1)
 		}
-		p.stats.InputTokens += int64(inputTokens)
-		p.stats.OutputTokens += int64(outputTokens)
-		p.stats.TotalLatencyMs += latencyMs
+		p.stats.InputTokens.Add(int64(inputTokens))
+		p.stats.OutputTokens.Add(int64(outputTokens))
+		p.stats.TotalLatencyMs.Add(latencyMs)
+
+		p.stats.mu.Lock()
 		if provider != "" {
 			p.stats.RequestsByProvider[provider]++
 			td := p.stats.TokensByProvider[provider]
@@ -433,7 +455,7 @@ func (p *ProxyServer) requestTrackingMiddleware(next http.Handler) http.Handler 
 		entry.ClientReqHeaders = string(safeClientHeaders)
 		if provider != "" {
 			p.logBuffer.Add(entry)
-			dbInsertLog(entry)
+			asyncLogInsert(entry)
 		}
 
 		log.Printf("%s %s %d %dms in=%d out=%d provider=%s model=%s ip=%s",
@@ -539,16 +561,15 @@ func (p *ProxyServer) authMiddleware(next http.Handler) http.Handler {
 			}
 			log.Printf("[DEBUG] authMiddleware: checking dynamic key, keyLen=%d", len(key))
 			if key != "" {
-				apiKeysMu.Lock()
-				if info, exists := apiKeys[key]; exists && info.Active {
+				apiKeysMu.RLock()
+				info, exists := apiKeys[key]
+				apiKeysMu.RUnlock()
+				if exists && info.Active {
 					validKey = true
-					info.RequestCount++
+					info.RequestCount.Add(1)
 					now := time.Now()
 					info.LastUsed = &now
-					apiKeysMu.Unlock()
-					dbUpdateAPIKeyUsage(info.ID, info.RequestCount, now)
-				} else {
-					apiKeysMu.Unlock()
+					dbUpdateAPIKeyUsage(info.ID, info.RequestCount.Load(), now)
 				}
 			}
 		}

@@ -9,6 +9,8 @@ import (
 type ctxKey string
 
 var providerSpecCtxKey ctxKey = "providerRouteSpec"
+var requestBodyCtxKey ctxKey = "requestBody"
+var isStreamCtxKey ctxKey = "isStream"
 
 type ProviderRouteSpec struct {
 	Name            string             `json:"name"`
@@ -38,6 +40,24 @@ func specFromContext(r *http.Request) *ProviderRouteSpec {
 
 func withSpec(r *http.Request, spec *ProviderRouteSpec) *http.Request {
 	return r.WithContext(context.WithValue(r.Context(), providerSpecCtxKey, spec))
+}
+
+func bodyFromContext(r *http.Request) []byte {
+	v, _ := r.Context().Value(requestBodyCtxKey).([]byte)
+	return v
+}
+
+func withBody(r *http.Request, body []byte) *http.Request {
+	return r.WithContext(context.WithValue(r.Context(), requestBodyCtxKey, body))
+}
+
+func isStreamFromContext(r *http.Request) bool {
+	v, _ := r.Context().Value(isStreamCtxKey).(bool)
+	return v
+}
+
+func withStreamFlag(r *http.Request, isStream bool) *http.Request {
+	return r.WithContext(context.WithValue(r.Context(), isStreamCtxKey, isStream))
 }
 
 func (p *ProxyServer) matchRoute(path string) *ProviderRouteSpec {

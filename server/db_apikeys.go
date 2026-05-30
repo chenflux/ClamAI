@@ -20,7 +20,7 @@ func dbSaveAPIKey(info *APIKeyInfo) {
 	k := &DBAPIKey{
 		ID: info.ID, Key: info.Key, Name: info.Name, UserID: info.UserID,
 		AllowedModels: string(modelsJSON), ProviderKeys: string(providerKeysJSON),
-		CreatedAt: info.CreatedAt, Active: info.Active, RequestCount: info.RequestCount,
+		CreatedAt: info.CreatedAt, Active: info.Active, RequestCount: info.RequestCount.Load(),
 	}
 	if info.LastUsed != nil {
 		k.LastUsed = info.LastUsed
@@ -69,8 +69,9 @@ func dbLoadAPIKeys() (map[string]*APIKeyInfo, map[string]*APIKeyInfo) {
 		k := &dbKeys[i]
 		info := &APIKeyInfo{
 			ID: k.ID, Key: k.Key, Name: k.Name, UserID: k.UserID,
-			CreatedAt: k.CreatedAt, Active: k.Active, RequestCount: k.RequestCount,
+			CreatedAt: k.CreatedAt, Active: k.Active,
 		}
+		info.RequestCount.Store(k.RequestCount)
 		json.Unmarshal([]byte(k.AllowedModels), &info.AllowedModels)
 		json.Unmarshal([]byte(k.ProviderKeys), &info.ProviderKeys)
 		if info.ProviderKeys == nil {

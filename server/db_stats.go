@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
 
@@ -21,9 +22,7 @@ func truncateStr(s string, maxLen int) string {
 const maxLogRows = 50000
 
 func dbSaveStats(stats *RequestStats) {
-	stats.mu.Lock()
 	data := stats.ToJSON()
-	stats.mu.Unlock()
 
 	gormDB.Save(&DBStat{
 		ID:              1,
@@ -36,34 +35,46 @@ func dbSaveStats(stats *RequestStats) {
 		UpdatedAt:       time.Now().UTC(),
 	})
 
-	for k, v := range data.RequestsByProvider {
-		td := data.TokensByProvider[k]
-		gormDB.Clauses(clause.OnConflict{
-			Columns:   []clause.Column{{Name: "provider"}},
-			DoUpdates: clause.AssignmentColumns([]string{"requests", "input_tokens", "output_tokens"}),
-		}).Create(&DBStatByProvider{
-			Provider:     k,
-			Requests:     v,
-			InputTokens:  td.InputTokens,
-			OutputTokens: td.OutputTokens,
-		})
-	}
-	for k, v := range data.RequestsByModel {
-		gormDB.Clauses(clause.OnConflict{
-			Columns:   []clause.Column{{Name: "model"}},
-			DoUpdates: clause.AssignmentColumns([]string{"requests"}),
-		}).Create(&DBStatByModel{
-			Model:    k,
-			Requests: v,
-		})
-	}
-	for k, v := range data.DailyStats {
-		gormDB.Save(&DBStatDaily{
-			Date:         k,
-			Requests:     v.Requests,
-			InputTokens:  v.InputTokens,
-			OutputTokens: v.OutputTokens,
-		})
+	err := gormDB.Transaction(func(tx *gorm.DB) error {
+		for k, v := range data.RequestsByProvider {
+			td := data.TokensByProvider[k]
+			if err := tx.Clauses(clause.OnConflict{
+				Columns:   []clause.Column{{Name: "provider"}},
+				DoUpdates: clause.AssignmentColumns([]string{"requests", "input_tokens", "output_tokens"}),
+			}).Create(&DBStatByProvider{
+				Provider:     k,
+				Requests:     v,
+				InputTokens:  td.InputTokens,
+				OutputTokens: td.OutputTokens,
+			}).Error; err != nil {
+				return err
+			}
+		}
+		for k, v := range data.RequestsByModel {
+			if err := tx.Clauses(clause.OnConflict{
+				Columns:   []clause.Column{{Name: "model"}},
+				DoUpdates: clause.AssignmentColumns([]string{"requests"}),
+			}).Create(&DBStatByModel{
+				Model:    k,
+				Requests: v,
+			}).Error; err != nil {
+				return err
+			}
+		}
+		for k, v := range data.DailyStats {
+			if err := tx.Save(&DBStatDaily{
+				Date:         k,
+				Requests:     v.Requests,
+				InputTokens:  v.InputTokens,
+				OutputTokens: v.OutputTokens,
+			}).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		log.Printf("[ERROR] dbSaveStats transaction: %v", err)
 	}
 }
 
@@ -71,12 +82,12 @@ func dbLoadStats(stats *RequestStats) {
 	stats.mu.Lock()
 	defer stats.mu.Unlock()
 
-	stats.TotalRequests = 0
-	stats.SuccessRequests = 0
-	stats.ErrorRequests = 0
-	stats.InputTokens = 0
-	stats.OutputTokens = 0
-	stats.TotalLatencyMs = 0
+	stats.TotalRequests.Store(0)
+	stats.SuccessRequests.Store(0)
+	stats.ErrorRequests.Store(0)
+	stats.InputTokens.Store(0)
+	stats.OutputTokens.Store(0)
+	stats.TotalLatencyMs.Store(0)
 	stats.RequestsByProvider = make(map[string]int64)
 	stats.TokensByProvider = make(map[string]TokenDetail)
 	stats.RequestsByModel = make(map[string]int64)
@@ -85,12 +96,12 @@ func dbLoadStats(stats *RequestStats) {
 
 	var mainStat DBStat
 	if err := gormDB.First(&mainStat).Error; err == nil {
-		stats.TotalRequests = mainStat.TotalRequests
-		stats.SuccessRequests = mainStat.SuccessRequests
-		stats.ErrorRequests = mainStat.ErrorRequests
-		stats.InputTokens = mainStat.InputTokens
-		stats.OutputTokens = mainStat.OutputTokens
-		stats.TotalLatencyMs = mainStat.TotalLatencyMs
+		stats.TotalRequests.Store(mainStat.TotalRequests)
+		stats.SuccessRequests.Store(mainStat.SuccessRequests)
+		stats.ErrorRequests.Store(mainStat.ErrorRequests)
+		stats.InputTokens.Store(mainStat.InputTokens)
+		stats.OutputTokens.Store(mainStat.OutputTokens)
+		stats.TotalLatencyMs.Store(mainStat.TotalLatencyMs)
 	}
 
 	var providerStats []DBStatByProvider
@@ -99,9 +110,9 @@ func dbLoadStats(stats *RequestStats) {
 		stats.RequestsByProvider[ps.Provider] = ps.Requests
 		td := TokenDetail{InputTokens: ps.InputTokens, OutputTokens: ps.OutputTokens}
 		stats.TokensByProvider[ps.Provider] = td
-		stats.TotalRequests += ps.Requests
-		stats.InputTokens += ps.InputTokens
-		stats.OutputTokens += ps.OutputTokens
+		stats.TotalRequests.Add(ps.Requests)
+		stats.InputTokens.Add(ps.InputTokens)
+		stats.OutputTokens.Add(ps.OutputTokens)
 	}
 
 	var modelStats []DBStatByModel
@@ -120,7 +131,7 @@ func dbLoadStats(stats *RequestStats) {
 		}
 	}
 
-	log.Printf("[INFO] dbLoadStats: total=%d, success=%d (from pre-computed tables)", stats.TotalRequests, stats.SuccessRequests)
+	log.Printf("[INFO] dbLoadStats: total=%d, success=%d (from pre-computed tables)", stats.TotalRequests.Load(), stats.SuccessRequests.Load())
 }
 
 func dbInsertLog(entry *RequestLog) {

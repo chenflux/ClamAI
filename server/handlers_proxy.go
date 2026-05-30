@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -57,19 +58,28 @@ func (p *ProxyServer) handleTransparentProxy(w http.ResponseWriter, r *http.Requ
 		upstreamBase = spec.UpstreamBase
 	}
 
-	bodyBytes, err := io.ReadAll(io.LimitReader(r.Body, 50<<20))
-	if err != nil {
-		http.Error(w, "Failed to read request body", http.StatusBadRequest)
-		return
+	if rawKey := extractAPIKeyFromRequest(r); rawKey != "" {
+		apiKeysMu.RLock()
+		if info, exists := apiKeys[rawKey]; exists && info.Active {
+			if pk, ok := info.ProviderKeys[spec.Name]; ok && pk != "" {
+				apiKey = pk
+			}
+		}
+		apiKeysMu.RUnlock()
 	}
-	r.Body.Close()
+
+	bodyBytes := bodyFromContext(r)
+	if bodyBytes == nil {
+		bodyBytes, _ = io.ReadAll(io.LimitReader(r.Body, 50<<20))
+		r.Body.Close()
+	}
 
 	upstreamURL := buildUpstreamURL(r.URL.Path, spec)
 	if r.URL.RawQuery != "" {
 		upstreamURL += "?" + r.URL.RawQuery
 	}
 
-	proxyReq, err := http.NewRequest(r.Method, upstreamURL, strings.NewReader(string(bodyBytes)))
+	proxyReq, err := http.NewRequest(r.Method, upstreamURL, bytes.NewReader(bodyBytes))
 	if err != nil {
 		log.Printf("[ERROR] transparent proxy: create request failed for %s: %v", upstreamURL, err)
 		http.Error(w, "Failed to create upstream request", http.StatusBadGateway)
@@ -96,7 +106,6 @@ func (p *ProxyServer) handleTransparentProxy(w http.ResponseWriter, r *http.Requ
 	}
 
 	if apiKey != "" {
-		log.Printf("[DEBUG] transparent proxy: upstream provider=%s, apiKey=%s (len=%d)", spec.Name, maskAPIKey(apiKey), len(apiKey))
 		switch spec.AuthType {
 		case "x-api-key":
 			proxyReq.Header.Set("x-api-key", apiKey)
@@ -104,8 +113,6 @@ func (p *ProxyServer) handleTransparentProxy(w http.ResponseWriter, r *http.Requ
 		default:
 			proxyReq.Header.Set("Authorization", "Bearer "+apiKey)
 		}
-	} else {
-		log.Printf("[WARN] transparent proxy: upstream provider=%s has NO api key!", spec.Name)
 	}
 	if proxyReq.Header.Get("Content-Type") == "" && len(bodyBytes) > 0 {
 		proxyReq.Header.Set("Content-Type", "application/json")
@@ -129,38 +136,87 @@ func (p *ProxyServer) handleTransparentProxy(w http.ResponseWriter, r *http.Requ
 		http.Error(w, "Upstream request failed", http.StatusBadGateway)
 		return
 	}
+	defer resp.Body.Close()
 
 	respHeaders := make(map[string]string)
 	for key, values := range resp.Header {
 		respHeaders[key] = strings.Join(values, ",")
 	}
-	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 50<<20))
-	resp.Body.Close()
 
 	log.Printf("[PROXY] %s %s → %s %d (%dms)", r.Method, r.URL.Path, upstreamURL, resp.StatusCode, latency.Milliseconds())
 
-	var inputTokens, outputTokens int
-	var respResult map[string]interface{}
-	if json.Unmarshal(respBody, &respResult) == nil {
-		if usage, ok := respResult["usage"].(map[string]interface{}); ok {
-			if v, ok := usage["prompt_tokens"].(float64); ok {
-				inputTokens = int(v)
-			} else if v, ok := usage["input_tokens"].(float64); ok {
-				inputTokens = int(v)
-			}
-			if v, ok := usage["completion_tokens"].(float64); ok {
-				outputTokens = int(v)
-			} else if v, ok := usage["output_tokens"].(float64); ok {
-				outputTokens = int(v)
+	isStream := isStreamFromContext(r)
+	if !isStream {
+		var peek map[string]interface{}
+		if json.Unmarshal(bodyBytes, &peek) == nil {
+			if s, ok := peek["stream"].(bool); ok && s {
+				isStream = true
 			}
 		}
+	}
+
+	var inputTokens, outputTokens int
+	var respBody []byte
+
+	if isStream {
+		for key, values := range resp.Header {
+			for _, value := range values {
+				w.Header().Add(key, value)
+			}
+		}
+		w.WriteHeader(resp.StatusCode)
+
+		flusher, canFlush := w.(http.Flusher)
+		scanner := newStreamTokenExtractor()
+		buf := make([]byte, 32*1024)
+		for {
+			n, readErr := resp.Body.Read(buf)
+			if n > 0 {
+				scanner.feed(buf[:n])
+				w.Write(buf[:n])
+				if canFlush {
+					flusher.Flush()
+				}
+			}
+			if readErr != nil {
+				break
+			}
+		}
+		inputTokens, outputTokens = scanner.tokens()
+	} else {
+		respBody, _ = io.ReadAll(io.LimitReader(resp.Body, 50<<20))
+		var respResult map[string]interface{}
+		if json.Unmarshal(respBody, &respResult) == nil {
+			if usage, ok := respResult["usage"].(map[string]interface{}); ok {
+				if v, ok := usage["prompt_tokens"].(float64); ok {
+					inputTokens = int(v)
+				} else if v, ok := usage["input_tokens"].(float64); ok {
+					inputTokens = int(v)
+				}
+				if v, ok := usage["completion_tokens"].(float64); ok {
+					outputTokens = int(v)
+				} else if v, ok := usage["output_tokens"].(float64); ok {
+					outputTokens = int(v)
+				}
+			}
+		}
+		for key, values := range resp.Header {
+			for _, value := range values {
+				w.Header().Add(key, value)
+			}
+		}
+		w.WriteHeader(resp.StatusCode)
+		w.Write(respBody)
 	}
 
 	upstreamReqContent := string(bodyBytes)
 	if len(upstreamReqContent) > 10000 {
 		upstreamReqContent = upstreamReqContent[:10000]
 	}
-	upstreamRespContent := string(respBody)
+	var upstreamRespContent string
+	if respBody != nil {
+		upstreamRespContent = string(respBody)
+	}
 	if len(upstreamRespContent) > 10000 {
 		upstreamRespContent = upstreamRespContent[:10000]
 	}
@@ -195,7 +251,7 @@ func (p *ProxyServer) handleTransparentProxy(w http.ResponseWriter, r *http.Requ
 		UpstreamModel:      getModelFromProxyRequest(bodyBytes),
 	}
 	if r.Header.Get("X-Internal-Test-Call") == "" {
-		dbInsertLog(upstreamEntry)
+		asyncLogInsert(upstreamEntry)
 	}
 
 	if cw, ok := w.(*capturingResponseWriter); ok {
@@ -205,14 +261,6 @@ func (p *ProxyServer) handleTransparentProxy(w http.ResponseWriter, r *http.Requ
 		cw.upstreamRespHeaders = string(respHeadersJSON)
 		cw.upstreamReqBody = truncateStr(upstreamReqContent, 10000)
 	}
-
-	for key, values := range resp.Header {
-		for _, value := range values {
-			w.Header().Add(key, value)
-		}
-	}
-	w.WriteHeader(resp.StatusCode)
-	w.Write(respBody)
 }
 
 func getModelFromProxyRequest(bodyBytes []byte) string {
@@ -271,7 +319,7 @@ func (p *ProxyServer) handleProviderModels(w http.ResponseWriter, r *http.Reques
 	apiKeyStr := extractAPIKeyFromRequest(r)
 	var allowedSet map[string]bool
 	if apiKeyStr != "" {
-		apiKeysMu.Lock()
+		apiKeysMu.RLock()
 		if info, ok := apiKeys[apiKeyStr]; ok && info.Active && len(info.AllowedModels) > 0 {
 			allowedSet = make(map[string]bool, len(info.AllowedModels))
 			for _, m := range info.AllowedModels {
@@ -286,7 +334,7 @@ func (p *ProxyServer) handleProviderModels(w http.ResponseWriter, r *http.Reques
 				}
 			}
 		}
-		apiKeysMu.Unlock()
+		apiKeysMu.RUnlock()
 	}
 
 	var models []ModelInfo

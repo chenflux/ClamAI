@@ -62,8 +62,8 @@ func initGormDB() error {
 	if err != nil {
 		return fmt.Errorf("failed to get underlying sql.DB: %w", err)
 	}
-	sqlDB.SetMaxOpenConns(10)
-	sqlDB.SetMaxIdleConns(5)
+	sqlDB.SetMaxOpenConns(25)
+	sqlDB.SetMaxIdleConns(10)
 
 	if err := autoMigrateAll(); err != nil {
 		return fmt.Errorf("auto migration failed: %w", err)

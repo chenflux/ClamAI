@@ -230,6 +230,7 @@ func (p *ProxyServer) setupRoutes() {
 
 	p.router.Use(p.corsMiddleware)
 	p.router.Use(p.providerMatchMiddleware)
+	p.router.Use(p.bodyReadMiddleware)
 	p.router.Use(p.apiLoggingMiddleware)
 	p.router.Use(p.rateLimitMiddleware)
 	p.router.Use(p.securityMiddleware)

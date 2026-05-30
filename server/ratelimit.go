@@ -1,10 +1,8 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"strconv"
@@ -29,7 +27,7 @@ type rateLimiterEntry struct {
 }
 
 type RateLimiterManager struct {
-	mu         sync.Mutex
+	mu         sync.RWMutex
 	config     RateLimitConfig
 	global     *rate.Limiter
 	byKey      map[string]*rateLimiterEntry
@@ -86,9 +84,7 @@ func (m *RateLimiterManager) getLimiter(category string, name string, rpm int) *
 	if rpm <= 0 {
 		return nil
 	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
+	m.mu.RLock()
 	var store map[string]*rateLimiterEntry
 	switch category {
 	case "key":
@@ -98,9 +94,26 @@ func (m *RateLimiterManager) getLimiter(category string, name string, rpm int) *
 	case "provider":
 		store = m.byProvider
 	default:
+		m.mu.RUnlock()
 		return nil
 	}
+	if entry, ok := store[name]; ok {
+		entry.lastSeen = time.Now()
+		m.mu.RUnlock()
+		return entry.limiter
+	}
+	m.mu.RUnlock()
 
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	switch category {
+	case "key":
+		store = m.byKey
+	case "model":
+		store = m.byModel
+	case "provider":
+		store = m.byProvider
+	}
 	if entry, ok := store[name]; ok {
 		entry.lastSeen = time.Now()
 		return entry.limiter
@@ -181,10 +194,7 @@ func (p *ProxyServer) rateLimitMiddleware(next http.Handler) http.Handler {
 		model := ""
 		provider := ""
 
-		bodyBytes, _ := io.ReadAll(r.Body)
-		r.Body.Close()
-		r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
-		if len(bodyBytes) > 0 {
+		if bodyBytes := bodyFromContext(r); len(bodyBytes) > 0 {
 			var reqMap map[string]interface{}
 			if json.Unmarshal(bodyBytes, &reqMap) == nil {
 				if m, ok := reqMap["model"].(string); ok {
